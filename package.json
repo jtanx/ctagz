@@ -1,0 +1,26 @@
+{
+  "name": "ctagz",
+  "version": "0.0.1",
+  "description": "JS Native ctags parser",
+  "main": "ctagz.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtanx/ctagz.git"
+  },
+  "keywords": [
+    "ctags"
+  ],
+  "author": "Jeremy Tan",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jtanx/ctagz/issues"
+  },
+  "homepage": "https://github.com/jtanx/ctagz#readme",
+  "dependencies": {
+    "bluebird": "^3.5.0",
+    "minimatch": "^3.0.3"
+  }
+}
