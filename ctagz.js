@@ -2,6 +2,7 @@
  *  Re-implementation of readtags.c in nodejs
  */
 
+const Deque = require('double-ended-queue')
 const minimatch = require('minimatch')
 const path = require('path')
 const Promise = require('bluebird')
@@ -18,7 +19,7 @@ class CTags {
         this.workingPos = 0
         this.readBuffer = Buffer.allocUnsafe(1024)
         this.decoder = new StringDecoder()
-        this.lines = []
+        this.lines = new Deque()
     }
 
     _skipPartialUTF8(buffer, length) {
@@ -45,17 +46,17 @@ class CTags {
                 .then(bytesRead => {
                     ctags.workingPos += bytesRead
                     let readBuffer = ctags.readBuffer
-                    if (ctags.decoder.lastTotal === 0) { // hurr internal property
+                    if (ctags.decoder.lastNeed === 0) { // hurr internal property
                         readBuffer = ctags._skipPartialUTF8(readBuffer, bytesRead)
                     }
 
                     const parts = ctags.decoder.write(readBuffer).split(/\r?\n/)
                     // console.log(`Got ${parts.length} parts`)
                     if (ctags.lines.length > 0) {
-                        ctags.lines[ctags.lines.length - 1] += parts[0]
-                        ctags.lines = ctags.lines.concat(parts.slice(1))
+                        ctags.lines.push(ctags.lines.pop() + parts[0])
+                        ctags.lines.push(...parts.slice(1))
                     } else {
-                        ctags.lines = parts
+                        ctags.lines.push(...parts)
                     }
 
                     return readAtLeastALine(ctags)
@@ -73,7 +74,7 @@ class CTags {
     _readTagLineSeek(pos) {
         this.pos = this.workingPos = Math.min(Math.max(pos, 0), this.size)
         this.decoder.end()
-        this.lines = []
+        this.lines.clear()
 
         this._readTagLine()
         return this._readTagLine()
