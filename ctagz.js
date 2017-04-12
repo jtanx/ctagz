@@ -51,7 +51,7 @@ class CTags {
                 splitPos = str.length
             }
 
-            const parts = str.substr(pos, splitPos).split(":", 2)
+            const parts = str.substr(pos, splitPos - pos).split(":", 2)
             if (parts.length === 1) {
                 entry.kind = parts[0]
             } else {
@@ -64,18 +64,16 @@ class CTags {
                 } else if (key === "line") {
                     entry.address.lineNumber = parseInt(value, 10)
                 } else {
-                    entry.fields.push({
-                        key,
-                        value
-                    })
+                    entry.fields[key] = value
                 }
             }
+            pos = splitPos
         }
     }
 
     _parseTagLine(line) {
         const entry = {
-            fields : [],
+            fields : {},
             kind : null,
             file: "",
             fileScope : false,
@@ -104,11 +102,35 @@ class CTags {
         if (pattern.length === 0) {
             return entry
         } else if (pattern[0] === '/' || pattern[0] === '?') {
-            // We need to convert from a vim style regex
-            // to a normal/pcre regex
-            // We're up sh*t creek
-            // http://stackoverflow.com/questions/3604617/why-does-vim-have-its-own-regex-syntax
-
+            // We need to convert from a vim style regex to a normal/pcre regex
+            // We'll assume ctags doesn't use anything fancy...
+            const delimiter = pattern[0]
+            let parsedPattern = ""
+            pos += 1
+            for (let bsc = 0; pos < pattern.length; pos += 1) {
+                if (pattern[pos] == '\\') {
+                    bsc += 1
+                } else if (bsc > 0) {
+                    parsedPattern += '\\'.repeat((bsc >>> 1))
+                    parsedPattern += pattern[pos]
+                    if ((bsc & (bsc - 1)) === 0) {
+                        // Escape!
+                    }
+                    bsc = 0
+                } else if (pattern[pos] === delimiter) {
+                    break;
+                } else {
+                    parsedPattern += pattern[pos]
+                }
+            }
+            if (pos < pattern.length) {
+                // We have a valid pattern
+                entry.address.pattern = parsedPattern
+                pos += 1
+            } else {
+                // It's invalid
+                return entry
+            }
         } else if (isdigit(pattern[0])) {
             entry.address.lineNumber = parseInt(pattern, 10)
             entry.address.pattern = entry.address.lineNumber.toString()
@@ -121,7 +143,7 @@ class CTags {
 
         const extensions = pattern.substr(pos)
         if (extensions.startsWith(';"')) {
-            _parseExtensionFields(extensions.substr(2), entry)
+            this._parseExtensionFields(extensions.substr(2), entry)
         }
         entry.valid = true
         return entry
