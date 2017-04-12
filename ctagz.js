@@ -11,7 +11,7 @@ const StringDecoder = require('string_decoder').StringDecoder
 
 const fs = Promise.promisifyAll(require('fs'))
 
-const PSEUDO_TAG_PREFIX = "!_"
+const PSEUDO_TAG_PREFIX = '!_'
 
 function isdigit(d) {
     return d >= '0' && d <= '9'
@@ -43,7 +43,7 @@ class CTags {
     _parseExtensionFields(str, entry) {
         let pos = 0
         while (pos < str.length) {
-            while (pos < str.length && str[pos] == '\t') {
+            while (pos < str.length && str[pos] === '\t') {
                 pos += 1
             }
             let splitPos = str.indexOf('\t', pos)
@@ -51,17 +51,17 @@ class CTags {
                 splitPos = str.length
             }
 
-            const parts = str.substr(pos, splitPos - pos).split(":", 2)
+            const parts = str.substr(pos, splitPos - pos).split(':', 2)
             if (parts.length === 1) {
                 entry.kind = parts[0]
             } else {
                 const key = parts[0]
                 const value = parts[1]
-                if (key === "kind") {
+                if (key === 'kind') {
                     entry.kind = value
-                } else if (key === "file") {
+                } else if (key === 'file') {
                     entry.fileScope = true
-                } else if (key === "line") {
+                } else if (key === 'line') {
                     entry.address.lineNumber = parseInt(value, 10)
                 } else {
                     entry.fields[key] = value
@@ -73,25 +73,25 @@ class CTags {
 
     _parseTagLine(line) {
         const entry = {
-            fields : {},
-            kind : null,
-            file: "",
-            fileScope : false,
-            name : "",
+            fields: {},
+            kind: null,
+            file: '',
+            fileScope: false,
+            name: '',
             address: {
                 lineNumber: 0,
-                pattern: ""
+                pattern: ''
             },
             valid: false
         }
 
-        const nameSplit = line.indexOf("\t")
+        const nameSplit = line.indexOf('\t')
         if (nameSplit < 0) {
             return entry
         }
         entry.name = line.substr(0, nameSplit)
 
-        const fileSplit = line.indexOf("\t", nameSplit + 1)
+        const fileSplit = line.indexOf('\t', nameSplit + 1)
         if (fileSplit < 0) {
             return entry
         }
@@ -105,10 +105,10 @@ class CTags {
             // We need to convert from a vim style regex to a normal/pcre regex
             // We'll assume ctags doesn't use anything fancy...
             const delimiter = pattern[0]
-            let parsedPattern = ""
+            let parsedPattern = ''
             pos += 1
             for (let bsc = 0; pos < pattern.length; pos += 1) {
-                if (pattern[pos] == '\\') {
+                if (pattern[pos] === '\\') {
                     bsc += 1
                 } else if (bsc > 0) {
                     parsedPattern += '\\'.repeat((bsc >>> 1))
@@ -118,7 +118,7 @@ class CTags {
                     }
                     bsc = 0
                 } else if (pattern[pos] === delimiter) {
-                    break;
+                    break
                 } else {
                     parsedPattern += pattern[pos]
                 }
@@ -150,7 +150,8 @@ class CTags {
     }
 
     _readTagLine() {
-        const readAtLeastALine = function readAtLeastALine(ctags) {
+        const ctags = this
+        const readAtLeastALine = function readAtLeastALine() {
             while (ctags.lines.length > 1) {
                 const line = ctags.lines.shift()
                 if (line) {
@@ -185,7 +186,7 @@ class CTags {
             return Promise.resolve(null)
         }
 
-        return readAtLeastALine(this)
+        return readAtLeastALine()
     }
 
     _readTagLineSeek(pos) {
@@ -199,11 +200,20 @@ class CTags {
     }
 
     _readPseudoTags() {
-        return this._readTagLine().then(l => {
-            if (l.startsWith(PSEUDO_TAG_PREFIX)) {
-                const entry = this._parseTagLine(l)
-                console.log(entry)
-            }
+        const ctags = this
+        const tagReader = function tagReader() {
+            return ctags._readTagLine().then(l => {
+                if (l && l.startsWith(PSEUDO_TAG_PREFIX)) {
+                    const entry = ctags._parseTagLine(l)
+                    console.log(entry)
+                    return tagReader()
+                }
+                return ctags
+            })
+        }
+
+        return tagReader().finally(() => {
+            this.workingPos = 0
         })
     }
 
@@ -222,9 +232,7 @@ class CTags {
             this.size = stats.size
             return this
         })
-        .then(() => {
-            return this._readPseudoTags()
-        })
+        .then(() => this._readPseudoTags())
         .then(() => this)
     }
 
