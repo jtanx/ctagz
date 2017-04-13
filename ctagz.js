@@ -150,41 +150,40 @@ class CTags {
     }
 
     _readTagLine() {
-        const ctags = this
-        const readAtLeastALine = function readAtLeastALine() {
-            while (ctags.lines.length > 1) {
-                const line = ctags.lines.shift()
+        const readAtLeastALine = Promise.method(() => {
+            while (this.lines.length > 1) {
+                const line = this.lines.shift()
                 if (line) {
-                    return Promise.resolve(line)
+                    return line
                 }
             }
-            if (ctags.workingPos < ctags.size) {
-                return fs.readAsync(ctags.fd, ctags.readBuffer, 0, ctags.readBuffer.length, ctags.workingPos)
+            if (this.workingPos < this.size) {
+                return fs.readAsync(this.fd, this.readBuffer, 0, this.readBuffer.length, this.workingPos)
                 .then(bytesRead => {
-                    ctags.workingPos += bytesRead
-                    let readBuffer = ctags.readBuffer
-                    if (ctags.shouldSkip) {
-                        readBuffer = ctags._skipPartialUTF8(readBuffer, bytesRead)
-                        ctags.shouldSkip = false
+                    this.workingPos += bytesRead
+                    let readBuffer = this.readBuffer
+                    if (this.shouldSkip) {
+                        readBuffer = this._skipPartialUTF8(readBuffer, bytesRead)
+                        this.shouldSkip = false
                     }
 
-                    const parts = ctags.decoder.write(readBuffer).split(/\r?\n/)
+                    const parts = this.decoder.write(readBuffer).split(/\r?\n/)
                     // console.log(`Got ${parts.length} parts`)
-                    if (ctags.lines.length > 0) {
-                        ctags.lines.push(ctags.lines.pop() + parts[0])
-                        ctags.lines.push(...parts.slice(1))
+                    if (this.lines.length > 0) {
+                        this.lines.push(this.lines.pop() + parts[0])
+                        this.lines.push(...parts.slice(1))
                     } else {
-                        ctags.lines.push(...parts)
+                        this.lines.push(...parts)
                     }
 
-                    return readAtLeastALine(ctags)
+                    return readAtLeastALine()
                 })
-            } else if (ctags.lines.length > 0) {
+            } else if (this.lines.length > 0) {
                 // Last line of file... probably
-                return Promise.resolve(ctags.lines.shift())
+                return this.lines.shift()
             }
-            return Promise.resolve(null)
-        }
+            return null
+        })
 
         return readAtLeastALine()
     }
@@ -195,20 +194,18 @@ class CTags {
         this.lines.clear()
         this.shouldSkip = true
 
-        this._readTagLine()
-        return this._readTagLine()
+        return this._readTagLine().then(() => this._readTagLine())
     }
 
     _readPseudoTags() {
-        const ctags = this
-        const tagReader = function tagReader() {
-            return ctags._readTagLine().then(l => {
+        const tagReader = () => {
+            return this._readTagLine().then(l => {
                 if (l && l.startsWith(PSEUDO_TAG_PREFIX)) {
-                    const entry = ctags._parseTagLine(l)
+                    const entry = this._parseTagLine(l)
                     console.log(entry)
                     return tagReader()
                 }
-                return ctags
+                return this
             })
         }
 
@@ -230,7 +227,6 @@ class CTags {
 
         return state.then(stats => {
             this.size = stats.size
-            return this
         })
         .then(() => this._readPseudoTags())
         .then(() => this)
