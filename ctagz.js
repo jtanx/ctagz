@@ -13,6 +13,10 @@ const fs = Promise.promisifyAll(require('fs'))
 
 const PSEUDO_TAG_PREFIX = '!_'
 
+const TAG_UNSORTED = 0
+const TAG_SORTED = 1
+const TAG_FOLDSORTED = 2
+
 function isdigit(d) {
     return d >= '0' && d <= '9'
 }
@@ -27,6 +31,16 @@ class CTags {
         this.decoder = new StringDecoder()
         this.lines = new Deque()
         this.shouldSkip = false
+        this.initialised = false
+
+        this.info = {
+            format: 1,
+            sort: TAG_UNSORTED,
+            author: '',
+            name: '',
+            url: '',
+            version: ''
+        }
     }
 
     _skipPartialUTF8(buffer, length) {
@@ -50,13 +64,16 @@ class CTags {
             if (splitPos < 0) {
                 splitPos = str.length
             }
+            let partPos = str.indexOf(':', pos)
+            if (partPos < 0 || partPos > splitPos) {
+                partPos = splitPos
+            }
 
-            const parts = str.substr(pos, splitPos - pos).split(':', 2)
-            if (parts.length === 1) {
-                entry.kind = parts[0]
+            if (partPos === splitPos) {
+                entry.kind = str.substr(pos, splitPos - pos)
             } else {
-                const key = parts[0]
-                const value = parts[1]
+                const key = str.substr(pos, partPos - pos)
+                const value = str.substr(partPos + 1, splitPos - partPos - 1)
                 if (key === 'kind') {
                     entry.kind = value
                 } else if (key === 'file') {
@@ -113,9 +130,9 @@ class CTags {
                 } else if (bsc > 0) {
                     parsedPattern += '\\'.repeat((bsc >>> 1))
                     parsedPattern += pattern[pos]
-                    if ((bsc & (bsc - 1)) === 0) {
+                    // if ((bsc & (bsc - 1)) === 0) {
                         // Escape!
-                    }
+                    // }
                     bsc = 0
                 } else if (pattern[pos] === delimiter) {
                     break
@@ -133,7 +150,7 @@ class CTags {
             }
         } else if (isdigit(pattern[0])) {
             entry.address.lineNumber = parseInt(pattern, 10)
-            entry.address.pattern = entry.address.lineNumber.toString()
+            // entry.address.pattern = entry.address.lineNumber.toString()
             while (pos < pattern.length && isdigit(pattern[pos])) {
                 pos += 1
             }
@@ -141,9 +158,8 @@ class CTags {
             return entry
         }
 
-        const extensions = pattern.substr(pos)
-        if (extensions.startsWith(';"')) {
-            this._parseExtensionFields(extensions.substr(2), entry)
+        if (pattern.indexOf(';"', pos) === pos) {
+            this._parseExtensionFields(pattern.substr(pos + 2), entry)
         }
         entry.valid = true
         return entry
@@ -198,19 +214,39 @@ class CTags {
     }
 
     _readPseudoTags() {
-        const tagReader = () => {
-            return this._readTagLine().then(l => {
-                if (l && l.startsWith(PSEUDO_TAG_PREFIX)) {
-                    const entry = this._parseTagLine(l)
-                    console.log(entry)
-                    return tagReader()
+        const tagReader = () => this._readTagLine().then(l => {
+            if (l && l.startsWith(PSEUDO_TAG_PREFIX)) {
+                const entry = this._parseTagLine(l)
+                switch (entry.name) {
+                    case '!_TAG_FILE_SORTED':
+                        this.info.sort = parseInt(entry.file, 10)
+                        break
+                    case '!_TAG_FILE_FORMAT':
+                        this.info.format = parseInt(entry.file, 10)
+                        break
+                    case '!_TAG_PROGRAM_AUTHOR':
+                        this.info.author = entry.file
+                        break
+                    case '!_TAG_PROGRAM_NAME':
+                        this.info.name = entry.file
+                        break
+                    case '!_TAG_PROGRAM_URL':
+                        this.info.url = entry.file
+                        break
+                    case '!_TAG_PROGRAM_VERSION':
+                        this.info.version = entry.file
+                        break
+                    default:
+                        break
                 }
-                return this
-            })
-        }
+                return tagReader()
+            }
+            return this
+        })
 
         return tagReader().finally(() => {
             this.workingPos = 0
+            console.log(this.info)
         })
     }
 
@@ -229,10 +265,14 @@ class CTags {
             this.size = stats.size
         })
         .then(() => this._readPseudoTags())
-        .then(() => this)
+        .then(() => {
+            this.initialised = true
+            return this
+        })
     }
 
     destroy() {
+        this.initialised = false
         if (this.fd) {
             return fs.closeAsync(this.fd).then(() => {
                 this.fd = 0
