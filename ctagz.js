@@ -11,6 +11,9 @@ const StringDecoder = require('string_decoder').StringDecoder
 
 const fs = Promise.promisifyAll(require('fs'))
 
+const READ_BUFSIZ = 1024
+const READ_JUMP_BACK = 512
+
 const PSEUDO_TAG_PREFIX = '!_'
 
 const TAG_UNSORTED = 0
@@ -50,8 +53,28 @@ class CTags {
         }
         if (offset > 0) {
             return buffer.slice(offset)
+        } else if (length < buffer.length) {
+            return buffer.slice(length)
         }
         return buffer
+    }
+
+    _getUTF8EncodedLength(str) {
+        // Based on http://stackoverflow.com/questions/5515869
+        let length = str.length
+        for (let i = length-1; i >= 0; --i) {
+            const cp = str.charCodeAt(i)
+            if (cp > 0x7f && cp <= 0x7ff) {
+                length += 1
+            } else if (cp > 0x7ff && cp <= 0xffff) {
+                length += 2
+            }
+            // Surrogate code point
+            if (cp >= 0xDC00 && cp <= 0xDFFF) {
+                --i
+            }
+        }
+        return length;
     }
 
     _parseExtensionFields(str, entry) {
@@ -170,6 +193,7 @@ class CTags {
             while (this.lines.length > 1) {
                 const line = this.lines.shift()
                 if (line) {
+                    // this.pos += this._getUTF8EncodedLength(line)
                     return line
                 }
             }
@@ -181,6 +205,8 @@ class CTags {
                     if (this.shouldSkip) {
                         readBuffer = this._skipPartialUTF8(readBuffer, bytesRead)
                         this.shouldSkip = false
+                    } else if (bytesRead < readBuffer.length) {
+                        readBuffer = readBuffer.slice(0, bytesRead)
                     }
 
                     const parts = this.decoder.write(readBuffer).split(/\r?\n/)
@@ -210,6 +236,9 @@ class CTags {
         this.lines.clear()
         this.shouldSkip = true
 
+        if (this.pos === 0) {
+            return this._readTagLine()
+        }
         return this._readTagLine().then(() => this._readTagLine())
     }
 
@@ -246,8 +275,108 @@ class CTags {
 
         return tagReader().finally(() => {
             this.workingPos = 0
-            console.log(this.info)
+            // console.log(this.info)
         })
+    }
+
+    _nameComparison(tag, otherTag) {
+        // Not sure if this is correct...
+        let ret = 0
+        if (tag < otherTag) {
+            ret = -1
+        } else if (tag > otherTag) {
+            ret = 1
+        }
+        console.log(`Name comp '${tag}':'${otherTag}' result: ${ret}`)
+        return ret
+    }
+
+    _findFirstNonMatchBefore(tag) {
+        const start = this.pos
+
+        return Promise.coroutine(function* finder(self) {
+            let moreLines = true
+            let comp = 0
+            do {
+                if (self.pos < READ_JUMP_BACK) {
+                    self.pos = 0
+                } else {
+                    self.pos -= READ_JUMP_BACK
+                }
+                const line = yield self._readTagLineSeek(self.pos)
+                if (line !== null) {
+                    const entry = self._parseTagLine(line)
+                    comp = self._nameComparison(tag, entry.name)
+                } else {
+                    moreLines = false
+                }
+            } while (moreLines && comp === 0 && self.pos > 0 && self.pos < start)
+        })(this)
+    }
+
+    _findFirstMatchBefore(tag) {
+        const start = this.pos
+
+        return Promise.coroutine(function* finder(self) {
+            let result
+            let moreLines = true
+            yield self._findFirstNonMatchBefore(tag)
+            do {
+                const line = yield self._readTagLine()
+                if (line !== null) {
+                    const entry = self._parseTagLine(line)
+                    if (entry.valid && self._nameComparison(tag, entry.name) === 0) {
+                        result = entry
+                    }
+                } else {
+                    moreLines = false
+                }
+            } while (moreLines && !result && self.pos < start)
+            return result
+        })(this)
+    }
+
+    _findBinary(tag) {
+        return Promise.coroutine(function* findit(self) {
+            let result
+            let lowerLimit = 0
+            let upperLimit = self.size
+            let lastPos = 0
+            let pos = upperLimit / 2
+
+            while (!result) {
+                const line = yield self._readTagLineSeek(pos)
+                if (!line) {
+                    // In case we fell off the end of the file
+                    console.log("Fell off the END")
+                    result = yield self._findFirstMatchBefore(tag)
+                    break
+                } else if (pos === lastPos) {
+                    console.log("Infinite loop broken")
+                    // prevent infinite loop if we backed up to the beginning of the file
+                    break
+                } else {
+                    const entry = self._parseTagLine(line)
+                    const comp = self._nameComparison(tag, entry.name)
+                    lastPos = pos
+                    if (comp < 0) {
+                        upperLimit = pos
+                        pos = lowerLimit + (((upperLimit - lowerLimit) / 2) >>> 0)
+                    } else if (comp > 0) {
+                        lowerLimit = pos
+                        pos = lowerLimit + (((upperLimit - lowerLimit) / 2) >>> 0)
+                    } else if (pos === 0) {
+                        // We found a match at the very start of the file
+                        console.log("Staring match!")
+                        result = entry
+                    } else {
+                        // We found a matching line, but not necessarily the first match; find the first one!
+                        result = yield self._findFirstMatchBefore(tag)
+                    }
+                }
+            }
+            return result
+        })(this)
     }
 
     init() {
