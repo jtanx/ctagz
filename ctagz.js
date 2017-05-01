@@ -30,10 +30,9 @@ class CTags {
         this.fd = fd
         this.pos = 0
         this.workingPos = 0
-        this.readBuffer = Buffer.allocUnsafe(1024)
+        this.readBuffer = Buffer.allocUnsafe(READ_BUFSIZ)
         this.decoder = new StringDecoder()
         this.lines = new Deque()
-        this.shouldSkip = false
         this.initialised = false
 
         this.info = {
@@ -44,37 +43,6 @@ class CTags {
             url: '',
             version: ''
         }
-    }
-
-    _skipPartialUTF8(buffer, length) {
-        let offset = 0
-        while (offset < length && (buffer[offset] & 0xC0) === 0x80) {
-            offset += 1
-        }
-        if (offset > 0) {
-            return buffer.slice(offset)
-        } else if (length < buffer.length) {
-            return buffer.slice(length)
-        }
-        return buffer
-    }
-
-    _getUTF8EncodedLength(str) {
-        // Based on http://stackoverflow.com/questions/5515869
-        let length = str.length
-        for (let i = length-1; i >= 0; --i) {
-            const cp = str.charCodeAt(i)
-            if (cp > 0x7f && cp <= 0x7ff) {
-                length += 1
-            } else if (cp > 0x7ff && cp <= 0xffff) {
-                length += 2
-            }
-            // Surrogate code point
-            if (cp >= 0xDC00 && cp <= 0xDFFF) {
-                --i
-            }
-        }
-        return length;
     }
 
     _parseExtensionFields(str, entry) {
@@ -193,7 +161,6 @@ class CTags {
             while (this.lines.length > 1) {
                 const line = this.lines.shift()
                 if (line) {
-                    // this.pos += this._getUTF8EncodedLength(line)
                     return line
                 }
             }
@@ -202,10 +169,7 @@ class CTags {
                 .then(bytesRead => {
                     this.workingPos += bytesRead
                     let readBuffer = this.readBuffer
-                    if (this.shouldSkip) {
-                        readBuffer = this._skipPartialUTF8(readBuffer, bytesRead)
-                        this.shouldSkip = false
-                    } else if (bytesRead < readBuffer.length) {
+                    if (bytesRead < readBuffer.length) {
                         readBuffer = readBuffer.slice(0, bytesRead)
                     }
 
@@ -234,7 +198,6 @@ class CTags {
         this.pos = this.workingPos = Math.min(Math.max(pos, 0), this.size)
         this.decoder.end()
         this.lines.clear()
-        this.shouldSkip = true
 
         if (this.pos === 0) {
             return this._readTagLine()
@@ -275,6 +238,8 @@ class CTags {
 
         return tagReader().finally(() => {
             this.workingPos = 0
+            this.decoder.end()
+            this.lines.clear()
             // console.log(this.info)
         })
     }
