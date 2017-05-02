@@ -6,9 +6,17 @@ const minimatch = require('minimatch')
 const path = require('path')
 const Promise = require('bluebird')
 const StringDecoder = require('string_decoder').StringDecoder
-// StringDecoder lastTotal contains number of bytes remaining in buffer
 
-const fs = Promise.promisifyAll(require('fs'))
+// Promise.promisifyAll is slow
+const fsO = require('fs')
+const fs = {
+    closeAsync: Promise.promisify(fsO.close),
+    fstatAsync: Promise.promisify(fsO.fstat),
+    openAsync: Promise.promisify(fsO.open),
+    readAsync: Promise.promisify(fsO.read),
+    readdirAsync: Promise.promisify(fsO.readdir),
+    statAsync: Promise.promisify(fsO.stat)
+}
 
 const READ_BUFSIZ = 1024
 const READ_JUMP_BACK = 256
@@ -249,7 +257,7 @@ class CTags {
         } else if (tag > otherTag) {
             ret = 1
         }
-        console.log(`Name comp '${tag}':'${otherTag}' result: ${ret}`)
+        // console.log(`Name comp '${tag}':'${otherTag}' result: ${ret}`)
         return ret
     }
 
@@ -298,7 +306,7 @@ class CTags {
         })(this)
     }
 
-    _findBinary(tag) {
+    findBinary(tag) {
         return Promise.coroutine(function* findit(self) {
             let result
             let lowerLimit = 0
@@ -310,11 +318,9 @@ class CTags {
                 const line = yield self._readTagLineSeek(pos)
                 if (!line) {
                     // In case we fell off the end of the file
-                    console.log("Fell off the END")
                     result = yield self._findFirstMatchBefore(tag)
                     break
                 } else if (pos === lastPos) {
-                    console.log("Infinite loop broken")
                     // prevent infinite loop if we backed up to the beginning of the file
                     break
                 } else {
@@ -329,7 +335,6 @@ class CTags {
                         pos = lowerLimit + (((upperLimit - lowerLimit) / 2) >>> 0)
                     } else if (pos === 0) {
                         // We found a match at the very start of the file
-                        console.log("Staring match!")
                         result = entry
                     } else {
                         // We found a matching line, but not necessarily the first match; find the first one!
@@ -337,7 +342,20 @@ class CTags {
                     }
                 }
             }
-            return result
+
+            const matches = []
+            if (result) {
+                matches.push(result)
+                let line
+                while (line = yield self._readTagLine()) {
+                    const entry = self._parseTagLine(line)
+                    if (!entry.valid || entry.name !== tag) {
+                        break
+                    }
+                    matches.push(entry)
+                }
+            }
+            return matches
         })(this)
     }
 
