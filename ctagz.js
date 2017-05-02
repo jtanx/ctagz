@@ -1,5 +1,5 @@
 /**
- *  Re-implementation of readtags.c in nodejs
+ * Re-implementation of readtags.c in nodejs
  */
 
 const minimatch = require('minimatch')
@@ -352,6 +352,20 @@ class CTags {
                     if (!entry.valid || entry.name !== tag) {
                         break
                     }
+                    matches.push(entry)
+                }
+            }
+            return matches
+        })(this)
+    }
+
+    findSequential(tag) {
+        return Promise.coroutine(function* findit(self) {
+            const matches = []
+            let line
+            while (line = yield self._readTagLine()) {
+                const entry = self._parseTagLine(line)
+                if (entry.valid && entry.name === tag) {
                     matches.push(entry)
                 }
             }
