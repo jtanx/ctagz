@@ -2,7 +2,6 @@
  *  Re-implementation of readtags.c in nodejs
  */
 
-const Deque = require('double-ended-queue')
 const minimatch = require('minimatch')
 const path = require('path')
 const Promise = require('bluebird')
@@ -12,7 +11,7 @@ const StringDecoder = require('string_decoder').StringDecoder
 const fs = Promise.promisifyAll(require('fs'))
 
 const READ_BUFSIZ = 1024
-const READ_JUMP_BACK = 512
+const READ_JUMP_BACK = 256
 
 const PSEUDO_TAG_PREFIX = '!_'
 
@@ -32,7 +31,7 @@ class CTags {
         this.workingPos = 0
         this.readBuffer = Buffer.allocUnsafe(READ_BUFSIZ)
         this.decoder = new StringDecoder()
-        this.lines = new Deque()
+        this.lines = []
         this.initialised = false
 
         this.info = {
@@ -176,11 +175,9 @@ class CTags {
                     const parts = this.decoder.write(readBuffer).split(/\r?\n/)
                     // console.log(`Got ${parts.length} parts`)
                     if (this.lines.length > 0) {
-                        this.lines.push(this.lines.pop() + parts[0])
-                        this.lines.push(...parts.slice(1))
-                    } else {
-                        this.lines.push(...parts)
+                        parts[0] = this.lines[0] + parts[0]
                     }
+                    this.lines = parts
 
                     return readAtLeastALine()
                 })
@@ -197,7 +194,7 @@ class CTags {
     _readTagLineSeek(pos) {
         this.pos = this.workingPos = Math.min(Math.max(pos, 0), this.size)
         this.decoder.end()
-        this.lines.clear()
+        this.lines = []
 
         if (this.pos === 0) {
             return this._readTagLine()
@@ -239,7 +236,7 @@ class CTags {
         return tagReader().finally(() => {
             this.workingPos = 0
             this.decoder.end()
-            this.lines.clear()
+            this.lines = []
             // console.log(this.info)
         })
     }
