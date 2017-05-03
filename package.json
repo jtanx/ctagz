@@ -11,7 +11,10 @@
     "url": "git+https://github.com/jtanx/ctagz.git"
   },
   "keywords": [
-    "ctags"
+    "ctags",
+    "etags",
+    "tags",
+    "vscode"
   ],
   "author": "Jeremy Tan",
   "license": "MIT",

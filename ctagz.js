@@ -27,10 +27,18 @@ const TAG_UNSORTED = 0
 const TAG_SORTED = 1
 const TAG_FOLDSORTED = 2
 
+/**
+ * Simple implementation of checking for a digit
+ * @param {string} d The character to check
+ * @return {bool} True iff d is an ascii digit
+ */
 function isdigit(d) {
     return d >= '0' && d <= '9'
 }
 
+/**
+ * Class to handle parsing a ctags file
+ */
 class CTags {
     constructor(tagsFile, fd) {
         this.tagsFile = tagsFile
@@ -407,19 +415,19 @@ class CTags {
 
 /**
  *  Finds the CTags file from the specified search path and pattern
- *  @param [in] searchPath The path to search. This may either be a
+ *  @param {string} searchPath The path to search. This may either be a
  *                         file or directory. If a file is passed,
  *                         its directory is searched. If the tag file
  *                         is not found, its parent directories are
  *                         then searched.
- *  @param [in] tagFilePattern The search pattern to use when searching
+ *  @param {string} tagFilePattern The search pattern to use when searching
  *                             for the tag file. This pattern can be
  *                             anything that the minimatch package
  *                             supports. However, if more than one file
  *                             matches, the results are sorted, and only
  *                             the first file is used as the tag file.
- *  @return An new CTags instance.
- *          The caller call destroy() when finished with it.
+ *  @return {any[]} An new CTags instance.
+ *                  The caller call destroy() when finished with it.
  */
 function findCTagsFile(searchPath, tagFilePattern = '{.,}tags') {
     const ctagsFinder = function ctagsFinder(tagPath) {
@@ -455,5 +463,32 @@ function findCTagsFile(searchPath, tagFilePattern = '{.,}tags') {
     })
 }
 
+/**
+ * Finds the CTags file from the specified search pattern and
+ * searches it for the specified tag
+ * @param {string} searchPath The path to search for the tags file
+ * @param {string} tag The tag to search for in the tags file
+ * @param {string} tagFilePattern The pattern to use when looking for
+ *                                the tags file (refer to findCTagsFile)
+ * @return {any[]} A promise, resolving to a list of found entries,
+ *                 or an empty array if none found
+ */
+function findCTagsBSearch(searchPath, tag, tagFilePattern = '{.,}tags') {
+    const ctags = findCTagsFile(searchPath, tagFilePattern)
+    .disposer(tags => {
+        if (tags) {
+            tags.destroy()
+        }
+    })
 
-module.exports = { CTags, findCTagsFile }
+    return Promise.using(ctags, tags => {
+        if (tags) {
+            return tags.init()
+            .then(() => tags.findBinary(tag))
+        }
+        return []
+    })
+}
+
+
+module.exports = { CTags, findCTagsFile, findCTagsBSearch }

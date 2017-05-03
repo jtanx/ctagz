@@ -6,13 +6,23 @@ JS Native ctags parser, based on the [reference implementation](https://github.c
 ```js
 const ctagz = require('ctagz')
 
+ctagz.findCTagsBSearch('.', 'tag_name').then(console.log)
+// ctagz.findCTagsBSearch('.', 'tag_name', 'my-custom-tags-file-name').then(console.log)
+```
+
+```js
+const ctagz = require('ctagz')
+
 let ctags
 ctagz.findCTagsFile('.')
 .then(tags => {
-    ctags = tags
-    return tags.init()
+    if (tags) {
+        ctags = tags
+        return tags.init()
+        .then(tags => tags.findBinary('tag_name'))
+    }
+    return []
 })
-.then(tags => tags.findBinary('tag_name'))
 .then(console.log)
 .finally(() => ctags.destroy())
 ```
