@@ -9,6 +9,7 @@ const StringDecoder = require('string_decoder').StringDecoder
 
 // Promise.promisifyAll is slow
 const fsO = require('fs')
+
 const fs = {
     closeAsync: Promise.promisify(fsO.close),
     fstatAsync: Promise.promisify(fsO.fstat),
@@ -485,8 +486,9 @@ function findCTagsBSearch(searchPath, tag, tagFilePattern = '{.,}tags') {
         if (tags) {
             return tags.init()
             .then(() => tags.findBinary(tag))
+            .then(result => ({ tagsFile: tags.tagsFile, results: result }))
         }
-        return []
+        return { tagsFile: '', results: [] }
     })
 }
 
