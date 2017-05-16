@@ -1,6 +1,6 @@
 {
   "name": "ctagz",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "JS Native ctags parser",
   "main": "ctagz.js",
   "scripts": {

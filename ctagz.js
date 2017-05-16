@@ -190,7 +190,7 @@ class CTags {
                     }
 
                     const parts = this.decoder.write(readBuffer).split(/\r?\n/)
-                    // console.log(`Got ${parts.length} parts`)
+                    // console.error(`Got ${parts.length} parts`)
                     if (this.lines.length > 0) {
                         parts[0] = this.lines[0] + parts[0]
                     }
@@ -254,7 +254,7 @@ class CTags {
             this.workingPos = 0
             this.decoder.end()
             this.lines = []
-            // console.log(this.info)
+            // console.error(this.info)
         })
     }
 
@@ -266,7 +266,7 @@ class CTags {
         } else if (tag > otherTag) {
             ret = 1
         }
-        // console.log(`Name comp '${tag}':'${otherTag}' result: ${ret}`)
+        // console.error(`Name comp '${tag}':'${otherTag}' result: ${ret}`)
         return ret
     }
 
@@ -315,7 +315,14 @@ class CTags {
         })(this)
     }
 
-    findBinary(tag) {
+    findBinary(tag, ignoreCase = false) {
+        if ((!ignoreCase && this.info.format !== TAG_SORTED) ||
+            (ignoreCase && this.info.format !== TAG_FOLDSORTED)) {
+            console.error('ctagz: Warning: Performing binary search but tags file may not be sorted correctly')
+            console.error(`ctagz: Warning (cont): Ignore case: ${ignoreCase} Tags format: ${this.info.format}`)
+        }
+
+        const searchTag = ignoreCase ? tag.toUpperCase() : tag
         return Promise.coroutine(function* findit(self) {
             let result
             let lowerLimit = 0
@@ -327,14 +334,14 @@ class CTags {
                 const line = yield self._readTagLineSeek(pos)
                 if (!line) {
                     // In case we fell off the end of the file
-                    result = yield self._findFirstMatchBefore(tag)
+                    result = yield self._findFirstMatchBefore(searchTag)
                     break
                 } else if (pos === lastPos) {
                     // prevent infinite loop if we backed up to the beginning of the file
                     break
                 } else {
                     const entry = self._parseTagLine(line)
-                    const comp = self._nameComparison(tag, entry.name)
+                    const comp = self._nameComparison(searchTag, entry.name)
                     lastPos = pos
                     if (comp < 0) {
                         upperLimit = pos
@@ -347,7 +354,7 @@ class CTags {
                         result = entry
                     } else {
                         // We found a matching line, but not necessarily the first match; find the first one!
-                        result = yield self._findFirstMatchBefore(tag)
+                        result = yield self._findFirstMatchBefore(searchTag)
                     }
                 }
             }
@@ -356,9 +363,9 @@ class CTags {
             if (result) {
                 matches.push(result)
                 let line
-                while (line = yield self._readTagLine()) {
+                while ((line = yield self._readTagLine())) {
                     const entry = self._parseTagLine(line)
-                    if (!entry.valid || entry.name !== tag) {
+                    if (!entry.valid || entry.name !== searchTag) {
                         break
                     }
                     matches.push(entry)
@@ -368,13 +375,17 @@ class CTags {
         })(this)
     }
 
-    findSequential(tag) {
+    findSequential(tag, ignoreCase = false) {
+        const searchTag = ignoreCase ? tag.toUpperCase() : tag
         return Promise.coroutine(function* findit(self) {
             const matches = []
             let line
-            while (line = yield self._readTagLine()) {
+            while ((line = yield self._readTagLine())) {
                 const entry = self._parseTagLine(line)
-                if (entry.valid && entry.name === tag) {
+                if (ignoreCase) {
+                    entry.name = entry.name.toUpperCase()
+                }
+                if (entry.valid && entry.name === searchTag) {
                     matches.push(entry)
                 }
             }
@@ -432,7 +443,7 @@ class CTags {
  */
 function findCTagsFile(searchPath, tagFilePattern = '{.,}tags') {
     const ctagsFinder = function ctagsFinder(tagPath) {
-        console.log(`Searching ${tagPath}`)
+        console.error(`ctagz: Searching ${tagPath}`)
         return fs.readdirAsync(tagPath).then(files => {
             const matched = files.filter(minimatch.filter(tagFilePattern)).sort()
             const ret = !matched ? Promise.resolve(null) :
@@ -469,12 +480,13 @@ function findCTagsFile(searchPath, tagFilePattern = '{.,}tags') {
  * searches it for the specified tag
  * @param {string} searchPath The path to search for the tags file
  * @param {string} tag The tag to search for in the tags file
+ * @param {bool}   ignoreCase Whether or not to ignore case when searching
  * @param {string} tagFilePattern The pattern to use when looking for
  *                                the tags file (refer to findCTagsFile)
  * @return {any[]} A promise, resolving to a list of found entries,
  *                 or an empty array if none found
  */
-function findCTagsBSearch(searchPath, tag, tagFilePattern = '{.,}tags') {
+function findCTagsBSearch(searchPath, tag, ignoreCase = false, tagFilePattern = '{.,}tags') {
     const ctags = findCTagsFile(searchPath, tagFilePattern)
     .disposer(tags => {
         if (tags) {
@@ -485,7 +497,7 @@ function findCTagsBSearch(searchPath, tag, tagFilePattern = '{.,}tags') {
     return Promise.using(ctags, tags => {
         if (tags) {
             return tags.init()
-            .then(() => tags.findBinary(tag))
+            .then(() => tags.findBinary(tag, ignoreCase))
             .then(result => ({ tagsFile: tags.tagsFile, results: result }))
         }
         return { tagsFile: '', results: [] }
