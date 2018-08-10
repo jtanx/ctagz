@@ -182,22 +182,22 @@ class CTags {
             }
             if (this.workingPos < this.size) {
                 return fs.readAsync(this.fd, this.readBuffer, 0, this.readBuffer.length, this.workingPos)
-                .then(bytesRead => {
-                    this.workingPos += bytesRead
-                    let readBuffer = this.readBuffer
-                    if (bytesRead < readBuffer.length) {
-                        readBuffer = readBuffer.slice(0, bytesRead)
-                    }
+                    .then(bytesRead => {
+                        this.workingPos += bytesRead
+                        let readBuffer = this.readBuffer
+                        if (bytesRead < readBuffer.length) {
+                            readBuffer = readBuffer.slice(0, bytesRead)
+                        }
 
-                    const parts = this.decoder.write(readBuffer).split(/\r?\n/)
-                    // console.error(`Got ${parts.length} parts`)
-                    if (this.lines.length > 0) {
-                        parts[0] = this.lines[0] + parts[0]
-                    }
-                    this.lines = parts
+                        const parts = this.decoder.write(readBuffer).split(/\r?\n/)
+                        // console.error(`Got ${parts.length} parts`)
+                        if (this.lines.length > 0) {
+                            parts[0] = this.lines[0] + parts[0]
+                        }
+                        this.lines = parts
 
-                    return readAtLeastALine()
-                })
+                        return readAtLeastALine()
+                    })
             } else if (this.lines.length > 0) {
                 // Last line of file... probably
                 return this.lines.shift()
@@ -407,11 +407,11 @@ class CTags {
         return state.then(stats => {
             this.size = stats.size
         })
-        .then(() => this._readPseudoTags())
-        .then(() => {
-            this.initialised = true
-            return this
-        })
+            .then(() => this._readPseudoTags())
+            .then(() => {
+                this.initialised = true
+                return this
+            })
     }
 
     destroy() {
@@ -447,20 +447,20 @@ function findCTagsFile(searchPath, tagFilePattern = '{.,}tags') {
         return fs.readdirAsync(tagPath).then(files => {
             const matched = files.filter(minimatch.filter(tagFilePattern)).sort()
             const ret = !matched ? Promise.resolve(null) :
-            Promise.reduce(matched, (acc, match) => {
-                if (acc) {
-                    return acc
-                }
-                const matchPath = path.join(tagPath, match)
-                return fs.statAsync(matchPath).then(stats => {
-                    if (!stats.isFile()) {
-                        return null
+                Promise.reduce(matched, (acc, match) => {
+                    if (acc) {
+                        return acc
                     }
+                    const matchPath = path.join(tagPath, match)
+                    return fs.statAsync(matchPath).then(stats => {
+                        if (!stats.isFile()) {
+                            return null
+                        }
 
-                    return fs.openAsync(matchPath, 'r').then(fd => new CTags(matchPath, fd))
-                    .catch(() => null)
-                })
-            }, null)
+                        return fs.openAsync(matchPath, 'r').then(fd => new CTags(matchPath, fd))
+                            .catch(() => null)
+                    })
+                }, null)
 
             return ret.then(result => {
                 const newTagPath = path.dirname(tagPath)
@@ -494,17 +494,17 @@ function findCTagsFile(searchPath, tagFilePattern = '{.,}tags') {
  */
 function findCTagsBSearch(searchPath, tag, ignoreCase = false, tagFilePattern = '{.,}tags') {
     const ctags = findCTagsFile(searchPath, tagFilePattern)
-    .disposer(tags => {
-        if (tags) {
-            tags.destroy()
-        }
-    })
+        .disposer(tags => {
+            if (tags) {
+                tags.destroy()
+            }
+        })
 
     return Promise.using(ctags, tags => {
         if (tags) {
             return tags.init()
-            .then(() => tags.findBinary(tag, ignoreCase))
-            .then(result => ({ tagsFile: tags.tagsFile, results: result }))
+                .then(() => tags.findBinary(tag, ignoreCase))
+                .then(result => ({ tagsFile: tags.tagsFile, results: result }))
         }
         return { tagsFile: '', results: [] }
     })
