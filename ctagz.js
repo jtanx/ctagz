@@ -452,8 +452,14 @@ function findCTagsFile(searchPath, tagFilePattern = '{.,}tags') {
                     return acc
                 }
                 const matchPath = path.join(tagPath, match)
-                return fs.openAsync(matchPath, 'r').then(fd => new CTags(matchPath, fd))
-                .catch(() => {}) // EAFP
+                return fs.statAsync(matchPath).then(stats => {
+                    if (!stats.isFile()) {
+                        return Promise.resolve(null)
+                    }
+
+                    return fs.openAsync(matchPath, 'r').then(fd => new CTags(matchPath, fd))
+                    .catch(() => {}) // EAFP
+                })
             }, null)
 
             return ret.then(result => {
