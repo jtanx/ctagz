@@ -138,7 +138,7 @@ class CTags {
                     parsedPattern += '\\'.repeat((bsc >>> 1))
                     parsedPattern += pattern[pos]
                     // if ((bsc & (bsc - 1)) === 0) {
-                        // Escape!
+                    // Escape!
                     // }
                     bsc = 0
                 } else if (pattern[pos] === delimiter) {
@@ -209,7 +209,7 @@ class CTags {
     }
 
     _readTagLineSeek(pos) {
-        this.pos = this.workingPos = Math.min(Math.max(pos, 0), this.size)
+        this.pos = this.workingPos = Math.floor(Math.min(Math.max(pos, 0), this.size))
         this.decoder.end()
         this.lines = []
 
@@ -316,10 +316,10 @@ class CTags {
     }
 
     findBinary(tag, ignoreCase = false) {
-        if ((!ignoreCase && this.info.format !== TAG_SORTED) ||
-            (ignoreCase && this.info.format !== TAG_FOLDSORTED)) {
+        if ((!ignoreCase && this.info.sort !== TAG_SORTED) ||
+            (ignoreCase && this.info.sort !== TAG_FOLDSORTED)) {
             console.error('ctagz: Warning: Performing binary search but tags file may not be sorted correctly')
-            console.error(`ctagz: Warning (cont): Ignore case: ${ignoreCase} Tags format: ${this.info.format}`)
+            console.error(`ctagz: Warning (cont): Ignore case: ${ignoreCase} Tags sort: ${this.info.sort}`)
         }
 
         const searchTag = ignoreCase ? tag.toUpperCase() : tag
